@@ -248,10 +248,10 @@ class SkywatcherAPI
 
         /// \brief Slew to the given position
         /// \param[in] Axis - The axis to use.
-        /// \param[in] Destination - The destination position in microsteps
+        /// \param[in] DestinationInMicrosteps - The destination position in microsteps
         /// \param[in] verbose - Verbose mode
         /// slew from any status.
-        void SlewTo_Advanced(AXISID Axis, long Destination, bool verbose = true);
+        void SlewTo_Advanced(AXISID Axis, long DestinationInMicrosteps, bool verbose = true);
 
         /// \brief Bring the axis to slow stop in the distance specified
         /// by SetSlewModeDeccelerationRampLength

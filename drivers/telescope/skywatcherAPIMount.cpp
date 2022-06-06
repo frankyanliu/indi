@@ -1029,6 +1029,10 @@ void SkywatcherAPIMount::TimerHit()
                 long AltitudeOffsetMicrosteps = DegreesToMicrosteps(AXIS2,
                                                 AltAz.altitude + GuideDeltaAlt) + ZeroPositionEncoders[AXIS2] - CurrentEncoders[AXIS2];
 
+                // Move AzimuthOffsetMicrosteps in 1 second ?
+                double AzimuthSpeedInRadianPerSecond = AzimuthOffsetMicrosteps / MicrostepsPerRadian[AXIS1];
+                double AltitudeSpeedInRadianPerSecond = AltitudeOffsetMicrosteps / MicrostepsPerRadian[AXIS2];
+
                 DEBUGF(DBG_SCOPE, "New Tracking Target AZOffset %ld microsteps ALOffset %ld microsteps.",
                        AltitudeOffsetMicrosteps, AzimuthOffsetMicrosteps);
 
@@ -1041,8 +1045,8 @@ void SkywatcherAPIMount::TimerHit()
                     // Calculate the slewing rates needed to reach that position
                     // at the correct time.
                     long AzimuthRate = StepperClockFrequency[AXIS1] / AzimuthOffsetMicrosteps;
-                    if (!AxesStatus[AXIS1].FullStop && ((AxesStatus[AXIS1].SlewingForward && (AzimuthRate < 0)) ||
-                                                        (!AxesStatus[AXIS1].SlewingForward && (AzimuthRate > 0))))
+                    if (!AxesStatus[AXIS1].FullStop && ((AxesStatus[AXIS1].SlewingForward && (AzimuthOffsetMicrosteps < 0)) ||
+                                                        (!AxesStatus[AXIS1].SlewingForward && (AzimuthOffsetMicrosteps > 0))))
                     {
                         // Direction change whilst axis running
                         // Abandon tracking for this clock tick
@@ -1051,14 +1055,21 @@ void SkywatcherAPIMount::TimerHit()
                     }
                     else
                     {
-                        char Direction = AzimuthRate > 0 ? '0' : '1';
-                        AzimuthRate    = std::abs(AzimuthRate) * TrackFactorNP[AXIS_AZ].getValue();
-                        SetClockTicksPerMicrostep(AXIS1, AzimuthRate < 1 ? 1 : AzimuthRate);
-                        if (AxesStatus[AXIS1].FullStop)
+                        if (SupportAdvancedCommandSet)
                         {
-                            DEBUG(DBG_SCOPE, "Tracking -> AXIS1 restart.");
-                            SetMotionMode(AXIS1, '1', Direction);
-                            StartMotion(AXIS1);
+                            Slew(AXIS1, AzimuthSpeedInRadianPerSecond, true)
+                        }
+                        else
+                        {
+                            char Direction = AzimuthRate > 0 ? '0' : '1';
+                            AzimuthRate    = std::abs(AzimuthRate) * TrackFactorNP[AXIS_AZ].getValue();
+                            SetClockTicksPerMicrostep(AXIS1, AzimuthRate < 1 ? 1 : AzimuthRate);
+                            if (AxesStatus[AXIS1].FullStop)
+                            {
+                                DEBUG(DBG_SCOPE, "Tracking -> AXIS1 restart.");
+                                SetMotionMode(AXIS1, '1', Direction);
+                                StartMotion(AXIS1);
+                            }
                         }
                         DEBUGF(DBG_SCOPE, "Tracking -> AXIS1 offset %ld microsteps rate %ld direction %c",
                                AzimuthOffsetMicrosteps, AzimuthRate, Direction);
@@ -1081,8 +1092,8 @@ void SkywatcherAPIMount::TimerHit()
                     // at the correct time.
                     long AltitudeRate = StepperClockFrequency[AXIS2] / AltitudeOffsetMicrosteps;
 
-                    if (!AxesStatus[AXIS2].FullStop && ((AxesStatus[AXIS2].SlewingForward && (AltitudeRate < 0)) ||
-                                                        (!AxesStatus[AXIS2].SlewingForward && (AltitudeRate > 0))))
+                    if (!AxesStatus[AXIS2].FullStop && ((AxesStatus[AXIS2].SlewingForward && (AltitudeOffsetMicrosteps < 0)) ||
+                                                        (!AxesStatus[AXIS2].SlewingForward && (AltitudeOffsetMicrosteps > 0))))
                     {
                         // Direction change whilst axis running
                         // Abandon tracking for this clock tick
@@ -1091,17 +1102,24 @@ void SkywatcherAPIMount::TimerHit()
                     }
                     else
                     {
-                        char Direction = AltitudeRate > 0 ? '0' : '1';
-                        AltitudeRate   = std::abs(AltitudeRate) * TrackFactorNP[AXIS_ALT].getValue();
-                        SetClockTicksPerMicrostep(AXIS2, AltitudeRate < 1 ? 1 : AltitudeRate);
-                        if (AxesStatus[AXIS2].FullStop)
+                        if (SupportAdvancedCommandSet)
                         {
-                            DEBUG(DBG_SCOPE, "Tracking -> AXIS2 restart.");
-                            SetMotionMode(AXIS2, '1', Direction);
-                            StartMotion(AXIS2);
+                            Slew(AXIS1, AltitudeSpeedInRadianPerSecond, true)
                         }
-                        DEBUGF(DBG_SCOPE, "Tracking -> AXIS2 offset %ld microsteps rate %ld direction %c",
-                               AltitudeOffsetMicrosteps, AltitudeRate, Direction);
+                        else
+                        {
+                            char Direction = AltitudeRate > 0 ? '0' : '1';
+                            AltitudeRate = std::abs(AltitudeRate) * TrackFactorNP[AXIS_ALT].getValue();
+                            SetClockTicksPerMicrostep(AXIS2, AltitudeRate < 1 ? 1 : AltitudeRate);
+                            if (AxesStatus[AXIS2].FullStop)
+                            {
+                                DEBUG(DBG_SCOPE, "Tracking -> AXIS2 restart.");
+                                SetMotionMode(AXIS2, '1', Direction);
+                                StartMotion(AXIS2);
+                            }
+                            DEBUGF(DBG_SCOPE, "Tracking -> AXIS2 offset %ld microsteps rate %ld direction %c",
+                                AltitudeOffsetMicrosteps, AltitudeRate, Direction);
+                        }
                     }
                 }
                 else
@@ -1185,10 +1203,20 @@ bool SkywatcherAPIMount::updateProperties()
         else
         {
             // Otherwise, we set all parking data to default in case no parking data is found.
-            SetAxis1Park(0x800000);
-            SetAxis2Park(0x800000);
-            SetAxis1ParkDefault(0x800000);
-            SetAxis2ParkDefault(0x800000);
+            if (SupportAdvancedCommandSet)
+            {
+                SetAxis1Park(0);
+                SetAxis2Park(0);
+                SetAxis1ParkDefault(0);
+                SetAxis2ParkDefault(0);
+            }
+            else
+            {
+                SetAxis1Park(0x800000);
+                SetAxis2Park(0x800000);
+                SetAxis1ParkDefault(0x800000);
+                SetAxis2ParkDefault(0x800000);
+            }
         }
 
         if (isParked())
