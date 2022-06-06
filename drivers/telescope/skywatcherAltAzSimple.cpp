@@ -163,55 +163,65 @@ bool SkywatcherAltAzSimple::Goto(double ra, double dec)
     LogMessage("NEW GOTO TARGET: Ra %lf Dec %lf - Alt %lf Az %lf - microsteps %ld %ld", ra, dec, AltAz.altitude,
                AltAz.azimuth,
                DegreesToMicrosteps(AXIS2, AltAz.altitude), DegreesToMicrosteps(AXIS1, AltAz.azimuth));
+    if (SupportAdvancedCommandSet)
+    {
+        long AzimuthMicrosteps = DegreesToMicrosteps(AXIS1, AltAz.azimuth) + ZeroPositionEncoders[AXIS1];
+        long AltitudeMicrosteps = DegreesToMicrosteps(AXIS2, AltAz.altitude) + ZeroPositionEncoders[AXIS2];
 
-    // Update the current encoder positions
-    GetEncoder(AXIS1);
-    GetEncoder(AXIS2);
-
-    long AltitudeOffsetMicrosteps =
-        DegreesToMicrosteps(AXIS2, AltAz.altitude) + ZeroPositionEncoders[AXIS2] - CurrentEncoders[AXIS2];
-    long AzimuthOffsetMicrosteps =
-        DegreesToMicrosteps(AXIS1, AltAz.azimuth) + ZeroPositionEncoders[AXIS1] - CurrentEncoders[AXIS1];
-
-    DEBUGF(DBG_SCOPE, "Initial deltas Altitude %ld microsteps Azimuth %ld microsteps", AltitudeOffsetMicrosteps,
-           AzimuthOffsetMicrosteps);
-    if (AltitudeOffsetMicrosteps > MicrostepsPerRevolution[AXIS2] / 2)
-    {
-        // Going the long way round - send it the other way
-        AltitudeOffsetMicrosteps -= MicrostepsPerRevolution[AXIS2];
-    }
-    if (AzimuthOffsetMicrosteps > MicrostepsPerRevolution[AXIS1] / 2)
-    {
-        // Going the long way round - send it the other way
-        AzimuthOffsetMicrosteps -= MicrostepsPerRevolution[AXIS1];
-    }
-    if (AltitudeOffsetMicrosteps < -MicrostepsPerRevolution[AXIS2] / 2)
-    {
-        // Going the long way round - send it the other way
-        AltitudeOffsetMicrosteps += MicrostepsPerRevolution[AXIS2];
-    }
-    if (AzimuthOffsetMicrosteps < -MicrostepsPerRevolution[AXIS1] / 2)
-    {
-        // Going the long way round - send it the other way
-        AzimuthOffsetMicrosteps += MicrostepsPerRevolution[AXIS1];
-    }
-    DEBUGF(DBG_SCOPE, "Initial Axis2 %ld microsteps Axis1 %ld microsteps",
-           ZeroPositionEncoders[AXIS2], ZeroPositionEncoders[AXIS1]);
-    DEBUGF(DBG_SCOPE, "Current Axis2 %ld microsteps Axis1 %ld microsteps",
-           CurrentEncoders[AXIS2], CurrentEncoders[AXIS1]);
-    DEBUGF(DBG_SCOPE, "Altitude offset %ld microsteps Azimuth offset %ld microsteps",
-           AltitudeOffsetMicrosteps, AzimuthOffsetMicrosteps);
-
-    if (IUFindSwitch(&SlewModesSP, "SLEW_NORMAL")->s == ISS_ON)
-    {
-        SilentSlewMode = false;
+        SlewTo_Advanced(AXIS1, AzimuthMicrosteps);
+        SlewTo_Advanced(AXIS2, AltitudeMicrosteps);
     }
     else
     {
-        SilentSlewMode = true;
+        // Update the current encoder positions
+        GetEncoder(AXIS1);
+        GetEncoder(AXIS2);
+
+        long AltitudeOffsetMicrosteps =
+            DegreesToMicrosteps(AXIS2, AltAz.altitude) + ZeroPositionEncoders[AXIS2] - CurrentEncoders[AXIS2];
+        long AzimuthOffsetMicrosteps =
+            DegreesToMicrosteps(AXIS1, AltAz.azimuth) + ZeroPositionEncoders[AXIS1] - CurrentEncoders[AXIS1];
+
+        DEBUGF(DBG_SCOPE, "Initial deltas Altitude %ld microsteps Azimuth %ld microsteps", AltitudeOffsetMicrosteps,
+            AzimuthOffsetMicrosteps);
+        if (AltitudeOffsetMicrosteps > MicrostepsPerRevolution[AXIS2] / 2)
+        {
+            // Going the long way round - send it the other way
+            AltitudeOffsetMicrosteps -= MicrostepsPerRevolution[AXIS2];
+        }
+        if (AzimuthOffsetMicrosteps > MicrostepsPerRevolution[AXIS1] / 2)
+        {
+            // Going the long way round - send it the other way
+            AzimuthOffsetMicrosteps -= MicrostepsPerRevolution[AXIS1];
+        }
+        if (AltitudeOffsetMicrosteps < -MicrostepsPerRevolution[AXIS2] / 2)
+        {
+            // Going the long way round - send it the other way
+            AltitudeOffsetMicrosteps += MicrostepsPerRevolution[AXIS2];
+        }
+        if (AzimuthOffsetMicrosteps < -MicrostepsPerRevolution[AXIS1] / 2)
+        {
+            // Going the long way round - send it the other way
+            AzimuthOffsetMicrosteps += MicrostepsPerRevolution[AXIS1];
+        }
+        DEBUGF(DBG_SCOPE, "Initial Axis2 %ld microsteps Axis1 %ld microsteps",
+            ZeroPositionEncoders[AXIS2], ZeroPositionEncoders[AXIS1]);
+        DEBUGF(DBG_SCOPE, "Current Axis2 %ld microsteps Axis1 %ld microsteps",
+            CurrentEncoders[AXIS2], CurrentEncoders[AXIS1]);
+        DEBUGF(DBG_SCOPE, "Altitude offset %ld microsteps Azimuth offset %ld microsteps",
+            AltitudeOffsetMicrosteps, AzimuthOffsetMicrosteps);
+
+        if (IUFindSwitch(&SlewModesSP, "SLEW_NORMAL")->s == ISS_ON)
+        {
+            SilentSlewMode = false;
+        }
+        else
+        {
+            SilentSlewMode = true;
+        }
+        SlewTo(AXIS1, AzimuthOffsetMicrosteps);
+        SlewTo(AXIS2, AltitudeOffsetMicrosteps);
     }
-    SlewTo(AXIS1, AzimuthOffsetMicrosteps);
-    SlewTo(AXIS2, AltitudeOffsetMicrosteps);
 
     TrackState = SCOPE_SLEWING;
 
@@ -810,24 +820,32 @@ bool SkywatcherAltAzSimple::Park()
     }
     DeltaAz = GetParkDeltaAz(TargetDirection, TargetPosition);
 
-    // Move the telescope to the desired position
-    long AltitudeOffsetMicrosteps = DegreesToMicrosteps(AXIS2, DeltaAlt);
-    long AzimuthOffsetMicrosteps  = DegreesToMicrosteps(AXIS1, DeltaAz);
-
-    DEBUGF(DBG_SCOPE, "Parking: Delta altitude %1.2f - delta azimuth %1.2f", DeltaAlt, DeltaAz);
-    DEBUGF(DBG_SCOPE, "Parking: Altitude offset %ld microsteps Azimuth offset %ld microsteps",
-           AltitudeOffsetMicrosteps, AzimuthOffsetMicrosteps);
-
-    if (IUFindSwitch(&SlewModesSP, "SLEW_NORMAL")->s == ISS_ON)
+    if (SupportAdvancedCommandSet)
     {
-        SilentSlewMode = false;
+        long AzTargetMicrosteps = DegreesToMicrosteps(DeltaAz + CurrentAltAz.azimuth);
+        SlewTo_Advanced(AXIS1£¬ AzTargetMicrosteps);
     }
     else
     {
-        SilentSlewMode = true;
+        // Move the telescope to the desired position
+        long AltitudeOffsetMicrosteps = DegreesToMicrosteps(AXIS2, DeltaAlt);
+        long AzimuthOffsetMicrosteps = DegreesToMicrosteps(AXIS1, DeltaAz);
+
+        DEBUGF(DBG_SCOPE, "Parking: Delta altitude %1.2f - delta azimuth %1.2f", DeltaAlt, DeltaAz);
+        DEBUGF(DBG_SCOPE, "Parking: Altitude offset %ld microsteps Azimuth offset %ld microsteps",
+            AltitudeOffsetMicrosteps, AzimuthOffsetMicrosteps);
+
+        if (IUFindSwitch(&SlewModesSP, "SLEW_NORMAL")->s == ISS_ON)
+        {
+            SilentSlewMode = false;
+        }
+        else
+        {
+            SilentSlewMode = true;
+        }
+        SlewTo(AXIS1, AzimuthOffsetMicrosteps);
+        SlewTo(AXIS2, AltitudeOffsetMicrosteps);
     }
-    SlewTo(AXIS1, AzimuthOffsetMicrosteps);
-    SlewTo(AXIS2, AltitudeOffsetMicrosteps);
 
     TrackState = SCOPE_PARKING;
     return true;
@@ -879,24 +897,35 @@ bool SkywatcherAltAzSimple::UnPark()
     // Altitude 3360 points the telescope upwards
     DeltaAlt = CurrentAltAz.altitude - 3360;
 
-    // Move the telescope to the desired position
-    long AltitudeOffsetMicrosteps = DegreesToMicrosteps(AXIS2, DeltaAlt);
-    long AzimuthOffsetMicrosteps  = DegreesToMicrosteps(AXIS1, DeltaAz);
-
-    DEBUGF(DBG_SCOPE, "Unparking: Delta altitude %1.2f - delta azimuth %1.2f", DeltaAlt, DeltaAz);
-    DEBUGF(DBG_SCOPE, "Unparking: Altitude offset %ld microsteps Azimuth offset %ld microsteps",
-           AltitudeOffsetMicrosteps, AzimuthOffsetMicrosteps);
-
-    if (IUFindSwitch(&SlewModesSP, "SLEW_NORMAL")->s == ISS_ON)
+    if (SupportAdvancedCommandSet)
     {
-        SilentSlewMode = false;
+        long AzTargetMicrosteps = DegreesToMicrosteps(DeltaAz + CurrentAltAz.azimuth);
+        long AltTargetMicrosteps = DegreesToMicrosteps(3360);
+
+        SlewTo_Advanced(AXIS1, AzTargetMicrosteps);
+        SlewTo_Advanced(AXIS2, AltTargetMicrosteps);
     }
     else
     {
-        SilentSlewMode = true;
+        // Move the telescope to the desired position
+        long AltitudeOffsetMicrosteps = DegreesToMicrosteps(AXIS2, DeltaAlt);
+        long AzimuthOffsetMicrosteps = DegreesToMicrosteps(AXIS1, DeltaAz);
+
+        DEBUGF(DBG_SCOPE, "Unparking: Delta altitude %1.2f - delta azimuth %1.2f", DeltaAlt, DeltaAz);
+        DEBUGF(DBG_SCOPE, "Unparking: Altitude offset %ld microsteps Azimuth offset %ld microsteps",
+            AltitudeOffsetMicrosteps, AzimuthOffsetMicrosteps);
+
+        if (IUFindSwitch(&SlewModesSP, "SLEW_NORMAL")->s == ISS_ON)
+        {
+            SilentSlewMode = false;
+        }
+        else
+        {
+            SilentSlewMode = true;
+        }
+        SlewTo(AXIS1, AzimuthOffsetMicrosteps);
+        SlewTo(AXIS2, AltitudeOffsetMicrosteps);
     }
-    SlewTo(AXIS1, AzimuthOffsetMicrosteps);
-    SlewTo(AXIS2, AltitudeOffsetMicrosteps);
 
     SetParked(false);
     TrackState = SCOPE_SLEWING;
@@ -1194,7 +1223,15 @@ void SkywatcherAltAzSimple::TimerHit()
 
                 if (0 != AzimuthOffsetMicrosteps)
                 {
-                    SlewTo(AXIS1, AzimuthOffsetMicrosteps, false);
+                    if (SupportAdvancedCommandSet)
+                    {
+                        long AzTargetMicrosteps = AzimuthOffsetMicrosteps + DegreesToMicrosteps(CurrentAltAz.azimuth);
+                        SlewTo_Advanced(AXIS1, AzTargetMicrosteps, false);
+                    }
+                    else
+                    {
+                        SlewTo(AXIS1, AzimuthOffsetMicrosteps, false);
+                    }
                 }
                 else
                 {
@@ -1204,7 +1241,15 @@ void SkywatcherAltAzSimple::TimerHit()
 
                 if (0 != AltitudeOffsetMicrosteps)
                 {
-                    SlewTo(AXIS2, AltitudeOffsetMicrosteps, false);
+                    if (SupportAdvancedCommandSet)
+                    {
+                        long AltTargetMicrosteps = AltitudeOffsetMicrosteps + DegreesToMicrosteps(CurrentAltAz.altitude);
+                        SlewTo_Advanced(AXIS2, AltTargetMicrosteps, false);
+                    }
+                    else
+                    {
+                        SlewTo(AXIS2, AltitudeOffsetMicrosteps, false);
+                    }
                 }
                 else
                 {
