@@ -438,38 +438,49 @@ bool SkywatcherAPIMount::Goto(double ra, double dec)
            AltAz.altitude,
            DegreesToMicrosteps(AXIS2, AltAz.altitude));
 
-    // Update the current encoder positions
-    GetEncoder(AXIS1);
-    GetEncoder(AXIS2);
-
-    long AzimuthOffsetMicrosteps  = DegreesToMicrosteps(AXIS1,
-                                    AltAz.azimuth) + ZeroPositionEncoders[AXIS1] - CurrentEncoders[AXIS1];
-    long AltitudeOffsetMicrosteps = DegreesToMicrosteps(AXIS2,
-                                    AltAz.altitude) + ZeroPositionEncoders[AXIS2] - CurrentEncoders[AXIS2];
-
-    if (AzimuthOffsetMicrosteps > MicrostepsPerRevolution[AXIS1] / 2)
+    if (SupportAdvancedCommandSet)
     {
-        // Going the long way round - send it the other way
-        AzimuthOffsetMicrosteps -= MicrostepsPerRevolution[AXIS1];
-    }
+        long AzimuthMicrosteps = DegreesToMicrosteps(AXIS1, AltAz.azimuth) + ZeroPositionEncoders[AXIS1];
+        long AltitudeMicrosteps = DegreesToMicrosteps(AXIS2, AltAz.altitude) + ZeroPositionEncoders[AXIS2];
 
-    // Do I need to take out any complete revolutions before I do this test?
-    if (AltitudeOffsetMicrosteps > MicrostepsPerRevolution[AXIS2] / 2)
+        SlewTo_Advanced(AXIS1, AzimuthMicrosteps);
+        SlewTo_Advanced(AXIS2, AltitudeMicrosteps);
+    }
+    else
     {
-        // Going the long way round - send it the other way
-        AltitudeOffsetMicrosteps -= MicrostepsPerRevolution[AXIS2];
+        // Update the current encoder positions
+        GetEncoder(AXIS1);
+        GetEncoder(AXIS2);
+
+        long AzimuthOffsetMicrosteps = DegreesToMicrosteps(AXIS1,
+            AltAz.azimuth) + ZeroPositionEncoders[AXIS1] - CurrentEncoders[AXIS1];
+        long AltitudeOffsetMicrosteps = DegreesToMicrosteps(AXIS2,
+            AltAz.altitude) + ZeroPositionEncoders[AXIS2] - CurrentEncoders[AXIS2];
+
+        if (AzimuthOffsetMicrosteps > MicrostepsPerRevolution[AXIS1] / 2)
+        {
+            // Going the long way round - send it the other way
+            AzimuthOffsetMicrosteps -= MicrostepsPerRevolution[AXIS1];
+        }
+
+        // Do I need to take out any complete revolutions before I do this test?
+        if (AltitudeOffsetMicrosteps > MicrostepsPerRevolution[AXIS2] / 2)
+        {
+            // Going the long way round - send it the other way
+            AltitudeOffsetMicrosteps -= MicrostepsPerRevolution[AXIS2];
+        }
+
+        DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT, "Current Axis1 %ld microsteps (Zero %ld) Axis2 %ld microsteps (Zero %ld)",
+            CurrentEncoders[AXIS1], ZeroPositionEncoders[AXIS1], CurrentEncoders[AXIS2], ZeroPositionEncoders[AXIS2]);
+        DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT, "Azimuth offset %ld microsteps | Altitude offset %ld microsteps",
+            AzimuthOffsetMicrosteps, AltitudeOffsetMicrosteps);
+
+        SilentSlewMode = (IUFindSwitch(&SlewModesSP, "SLEW_SILENT") != nullptr
+            && IUFindSwitch(&SlewModesSP, "SLEW_SILENT")->s == ISS_ON);
+
+        SlewTo(AXIS1, AzimuthOffsetMicrosteps);
+        SlewTo(AXIS2, AltitudeOffsetMicrosteps);
     }
-
-    DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT, "Current Axis1 %ld microsteps (Zero %ld) Axis2 %ld microsteps (Zero %ld)",
-           CurrentEncoders[AXIS1], ZeroPositionEncoders[AXIS1], CurrentEncoders[AXIS2], ZeroPositionEncoders[AXIS2]);
-    DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT, "Azimuth offset %ld microsteps | Altitude offset %ld microsteps",
-           AzimuthOffsetMicrosteps, AltitudeOffsetMicrosteps);
-
-    SilentSlewMode = (IUFindSwitch(&SlewModesSP, "SLEW_SILENT") != nullptr
-                      && IUFindSwitch(&SlewModesSP, "SLEW_SILENT")->s == ISS_ON);
-
-    SlewTo(AXIS1, AzimuthOffsetMicrosteps);
-    SlewTo(AXIS2, AltitudeOffsetMicrosteps);
 
     TrackState = SCOPE_SLEWING;
 
@@ -575,23 +586,31 @@ bool SkywatcherAPIMount::MoveWE(INDI_DIR_WE dir, TelescopeMotionCommand command)
 //////////////////////////////////////////////////////////////////////////////////////////////////
 bool SkywatcherAPIMount::Park()
 {
-    // Move the telescope to the desired position
-    long AltitudeOffsetMicrosteps = GetAxis2Park() - CurrentEncoders[AXIS2];
-    long AzimuthOffsetMicrosteps  = GetAxis1Park() - CurrentEncoders[AXIS1];
-    DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT,
-           "Parking: Altitude offset %ld microsteps Azimuth offset %ld microsteps", AltitudeOffsetMicrosteps,
-           AzimuthOffsetMicrosteps);
-
-    if (IUFindSwitch(&SlewModesSP, "SLEW_SILENT") != nullptr && IUFindSwitch(&SlewModesSP, "SLEW_SILENT")->s == ISS_ON)
+    if (SupportAdvancedCommandSet)
     {
-        SilentSlewMode = true;
+        SlewTo_Advanced( AXIS1, GetAxis1Park() );
+        SlewTo_Advanced( AXIS2, GetAxis2Park() );
     }
     else
     {
-        SilentSlewMode = false;
+        // Move the telescope to the desired position
+        long AltitudeOffsetMicrosteps = GetAxis2Park() - CurrentEncoders[AXIS2];
+        long AzimuthOffsetMicrosteps = GetAxis1Park() - CurrentEncoders[AXIS1];
+        DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT,
+            "Parking: Altitude offset %ld microsteps Azimuth offset %ld microsteps", AltitudeOffsetMicrosteps,
+            AzimuthOffsetMicrosteps);
+
+        if (IUFindSwitch(&SlewModesSP, "SLEW_SILENT") != nullptr && IUFindSwitch(&SlewModesSP, "SLEW_SILENT")->s == ISS_ON)
+        {
+            SilentSlewMode = true;
+        }
+        else
+        {
+            SilentSlewMode = false;
+        }
+        SlewTo(AXIS1, AzimuthOffsetMicrosteps);
+        SlewTo(AXIS2, AltitudeOffsetMicrosteps);
     }
-    SlewTo(AXIS1, AzimuthOffsetMicrosteps);
-    SlewTo(AXIS2, AltitudeOffsetMicrosteps);
 
     TrackState = SCOPE_PARKING;
     return true;

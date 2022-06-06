@@ -1,4 +1,5 @@
 /*!
+/*!
  * \file skywatcherAPI.cpp
  *
  * \author Roger James
@@ -245,6 +246,13 @@ class SkywatcherAPI
         /// slew from the current axis position.
         void SlewTo(AXISID Axis, long OffsetInMicrosteps, bool verbose = true);
 
+        /// \brief Slew to the given position
+        /// \param[in] Axis - The axis to use.
+        /// \param[in] Destination - The destination position in microsteps
+        /// \param[in] verbose - Verbose mode
+        /// slew from any status.
+        void SlewTo_Advanced(AXISID Axis, long Destination, bool verbose = true);
+
         /// \brief Bring the axis to slow stop in the distance specified
         /// by SetSlewModeDeccelerationRampLength
         /// \param[in] Axis - The axis to use.
@@ -308,6 +316,9 @@ class SkywatcherAPI
         AXISSTATUS AxesStatus[2];
         double SlewingSpeed[2];
 
+        // Whether the mount supports the new advanced command set. (Firmware version 3.22.xx or above)
+        bool SupportAdvancedCommandSet;
+
     protected:
         // Custom debug level
         unsigned int DBG_SCOPE { 0 };
@@ -326,3 +337,35 @@ class SkywatcherAPI
         INDI::Telescope *pChildTelescope { nullptr };
 #endif
 };
+
+/* Advanced command set */
+    // Read 32-bit data, 
+    // ":Xn00mm"
+    #define rSTATUS         "0001"
+    #define rRESOLUTION     "0002"
+    #define rENCODER        "0003"
+    #define rFIRMWARE       "0004"
+    #define rCLOCK_FREQUENCY "0006"
+    #define rSPEED          "0007"
+    #define rWORM_RESOLUTION "000E"
+
+    // Set encoder reading, 
+    // ":Xn01pppppppp", pppppppp in [Pulse] (microsteps)
+    #define wSET_ENCODER    "01"
+
+    // Set slewing speed, 
+    // ":Xn02vvvvvvvvvvvvvvvv", vvvvvvvvvvvvvvvv in [Pulse / 1024 Seconds]
+    #define wSET_SPEED      "02"
+
+    // GOTO, then slew in designated speed
+    // ":Xnppppppppvvvvvvvvvvvvvvvv"
+    #define wGOTO_SLEW      
+
+    // Actions
+    // ":Xn05mm"
+    #define wSWITCH_ON      "0500"
+    #define wSWITCH_OFF     "0501"
+    #define wSTOP           "0504"
+    #define wINITIALIZE     "0505"
+
+/* End of Advanced command set */

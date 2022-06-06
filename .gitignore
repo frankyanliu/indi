@@ -199,3 +199,8 @@ libindi/config.h
 3rdparty/indi-sx/indi_sx_wheel
 3rdparty/indi-sx/sx_ccd_test
 3rdparty/libinovasdk/make_inovasdk_symlink.cmake
+/.vs/indi/v17/.suo
+/.vs/indi/v17/Browse.VC.db
+/.vs/indi/v17/Browse.VC.db-shm
+/.vs/indi/v17/Browse.VC.db-wal
+/.vs/indi/v17/Browse.VC.opendb
