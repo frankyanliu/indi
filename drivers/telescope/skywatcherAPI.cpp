@@ -13,6 +13,9 @@
  *  + Added iterative GOTO.
  *  + Simplified driver and logging.
  *
+ * Updated on 2022-06-08 by Frank Y. Liu
+ *  + add support for the advanced command set provided with motor controller firmwares version 3.22 and above.
+ * 
  * This file contains an implementation in C++ of the Skywatcher API.
  * It is based on work from four sources.
  * A C++ implementation of the API by Roger James.

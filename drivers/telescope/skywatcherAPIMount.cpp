@@ -13,7 +13,10 @@
  *  + Added iterative GOTO.
  *  + Simplified driver and logging.
  *
- * This file contains an implementation in C++ of the Skywatcher API.
+ * Updated on 2022-06-08 by Frank Y. Liu
+ *  + add support for the advanced command set provided with motor controller firmwares version 3.22 and above.
+ * 
+* This file contains an implementation in C++ of the Skywatcher API.
  * It is based on work from four sources.
  * A C++ implementation of the API by Roger James.
  * The indi_eqmod driver by Jean-Luc Geehalel.
@@ -1029,10 +1032,6 @@ void SkywatcherAPIMount::TimerHit()
                 long AltitudeOffsetMicrosteps = DegreesToMicrosteps(AXIS2,
                                                 AltAz.altitude + GuideDeltaAlt) + ZeroPositionEncoders[AXIS2] - CurrentEncoders[AXIS2];
 
-                // Move AzimuthOffsetMicrosteps in 1 second ?
-                double AzimuthSpeedInRadianPerSecond = AzimuthOffsetMicrosteps / MicrostepsPerRadian[AXIS1];
-                double AltitudeSpeedInRadianPerSecond = AltitudeOffsetMicrosteps / MicrostepsPerRadian[AXIS2];
-
                 DEBUGF(DBG_SCOPE, "New Tracking Target AZOffset %ld microsteps ALOffset %ld microsteps.",
                        AltitudeOffsetMicrosteps, AzimuthOffsetMicrosteps);
 
@@ -1042,27 +1041,33 @@ void SkywatcherAPIMount::TimerHit()
 
                 if (0 != AzimuthOffsetMicrosteps)
                 {
-                    // Calculate the slewing rates needed to reach that position
-                    // at the correct time.
-                    long AzimuthRate = StepperClockFrequency[AXIS1] / AzimuthOffsetMicrosteps;
-                    if (!AxesStatus[AXIS1].FullStop && ((AxesStatus[AXIS1].SlewingForward && (AzimuthOffsetMicrosteps < 0)) ||
-                                                        (!AxesStatus[AXIS1].SlewingForward && (AzimuthOffsetMicrosteps > 0))))
+                    if (SupportAdvancedCommandSet)
                     {
-                        // Direction change whilst axis running
-                        // Abandon tracking for this clock tick
-                        DEBUG(DBG_SCOPE, "Tracking -> AXIS1 direction change.");
-                        SlowStop(AXIS1);
+                        // Calculate the slewing rate(in radian)  needed to reach that position
+                        double AzimuthSpeedInRadianPerSecond = AzimuthOffsetMicrosteps / (getCurrentPollingPeriod() / 1000.0) / MicrostepsPerRadian[AXIS1];
+
+                        Slew(AXIS1, AzimuthSpeedInRadianPerSecond, true)
+
+                        DEBUGF(DBG_SCOPE, "Tracking -> AXIS1 offset %ld microsteps rate %ld rad/s",
+                            AzimuthOffsetMicrosteps, AzimuthSpeedInRadianPerSecond );
                     }
                     else
                     {
-                        if (SupportAdvancedCommandSet)
+                        // Calculate the slewing rates needed to reach that position
+                        // at the correct time.
+                        long AzimuthRate = StepperClockFrequency[AXIS1] / AzimuthOffsetMicrosteps;
+                        if (!AxesStatus[AXIS1].FullStop && ((AxesStatus[AXIS1].SlewingForward && (AzimuthOffsetMicrosteps < 0)) ||
+                            (!AxesStatus[AXIS1].SlewingForward && (AzimuthOffsetMicrosteps > 0))))
                         {
-                            Slew(AXIS1, AzimuthSpeedInRadianPerSecond, true)
+                            // Direction change whilst axis running
+                            // Abandon tracking for this clock tick
+                            DEBUG(DBG_SCOPE, "Tracking -> AXIS1 direction change.");
+                            SlowStop(AXIS1);
                         }
                         else
                         {
                             char Direction = AzimuthRate > 0 ? '0' : '1';
-                            AzimuthRate    = std::abs(AzimuthRate) * TrackFactorNP[AXIS_AZ].getValue();
+                            AzimuthRate = std::abs(AzimuthRate) * TrackFactorNP[AXIS_AZ].getValue();
                             SetClockTicksPerMicrostep(AXIS1, AzimuthRate < 1 ? 1 : AzimuthRate);
                             if (AxesStatus[AXIS1].FullStop)
                             {
@@ -1070,9 +1075,10 @@ void SkywatcherAPIMount::TimerHit()
                                 SetMotionMode(AXIS1, '1', Direction);
                                 StartMotion(AXIS1);
                             }
+
+                            DEBUGF(DBG_SCOPE, "Tracking -> AXIS1 offset %ld microsteps rate %ld direction %c",
+                                AzimuthOffsetMicrosteps, AzimuthRate, Direction);
                         }
-                        DEBUGF(DBG_SCOPE, "Tracking -> AXIS1 offset %ld microsteps rate %ld direction %c",
-                               AzimuthOffsetMicrosteps, AzimuthRate, Direction);
                     }
                 }
                 else
@@ -1088,23 +1094,29 @@ void SkywatcherAPIMount::TimerHit()
 
                 if (0 != AltitudeOffsetMicrosteps)
                 {
-                    // Calculate the slewing rates needed to reach that position
-                    // at the correct time.
-                    long AltitudeRate = StepperClockFrequency[AXIS2] / AltitudeOffsetMicrosteps;
-
-                    if (!AxesStatus[AXIS2].FullStop && ((AxesStatus[AXIS2].SlewingForward && (AltitudeOffsetMicrosteps < 0)) ||
-                                                        (!AxesStatus[AXIS2].SlewingForward && (AltitudeOffsetMicrosteps > 0))))
+                    if (SupportAdvancedCommandSet)
                     {
-                        // Direction change whilst axis running
-                        // Abandon tracking for this clock tick
-                        DEBUG(DBG_SCOPE, "Tracking -> AXIS2 direction change.");
-                        SlowStop(AXIS2);
+                        // Calculate the slewing rate(in radian) needed to reach that position
+                        double AltitudeSpeedInRadianPerSecond = AltitudeOffsetMicrosteps / (getCurrentPollingPeriod() / 1000.0) / MicrostepsPerRadian[AXIS2];
+
+                        Slew(AXIS2, AltitudeSpeedInRadianPerSecond, true)
+
+                        DEBUGF(DBG_SCOPE, "Tracking -> AXIS2 offset %ld microsteps rate %ld rad/s",
+                            AltitudeOffsetMicrosteps, AltitudeSpeedInRadianPerSecond);
                     }
                     else
                     {
-                        if (SupportAdvancedCommandSet)
+                        // Calculate the slewing rates needed to reach that position
+                        // at the correct time.
+                        long AltitudeRate = StepperClockFrequency[AXIS2] / AltitudeOffsetMicrosteps;
+
+                        if (!AxesStatus[AXIS2].FullStop && ((AxesStatus[AXIS2].SlewingForward && (AltitudeOffsetMicrosteps < 0)) ||
+                            (!AxesStatus[AXIS2].SlewingForward && (AltitudeOffsetMicrosteps > 0))))
                         {
-                            Slew(AXIS1, AltitudeSpeedInRadianPerSecond, true)
+                            // Direction change whilst axis running
+                            // Abandon tracking for this clock tick
+                            DEBUG(DBG_SCOPE, "Tracking -> AXIS2 direction change.");
+                            SlowStop(AXIS2);
                         }
                         else
                         {

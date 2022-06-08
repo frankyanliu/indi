@@ -6,6 +6,9 @@
  * \author Jean-Luc Geehalel
  * \date 13th November 2013
  *
+ * Updated on 2022-06-08 by Frank Y. Liu
+ *  + add support for the advanced command set provided with motor controller firmwares version 3.22 and above.
+ * 
  * This file contains the definitions for a C++ implementatiom of a INDI telescope driver using the Skywatcher API.
  * It is based on work from three sources.
  * A C++ implementation of the API by Roger James.
