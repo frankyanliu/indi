@@ -881,15 +881,15 @@ void SkywatcherAPI::SlewTo_Advanced(AXISID Axis, long DestinationInMicrosteps, b
 
 bool SkywatcherAPI::SlowStop(AXISID Axis)
 {
+    // Request a slow stop
+    std::string Parameters, Response;
+
     if (SupportAdvancedCommandSet)
     {
-        Slew(Axis, 0, true);
+        return TalkWithAxis(Axis, 'X', wSTOP, Response);
     }
     else
     {
-        // Request a slow stop
-        std::string Parameters, Response;
-
         return TalkWithAxis(Axis, 'K', Parameters, Response);
     }
 }
