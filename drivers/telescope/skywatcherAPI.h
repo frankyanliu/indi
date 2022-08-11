@@ -7,6 +7,9 @@
  * \author Jean-Luc Geehalel
  * \date 13th November 2013
  *
+ * Updated on 2022-06-08 by Frank Y. Liu
+ *  + add support for the advanced command set provided with motor controller firmwares version 3.22 and above.
+ * 
  * This file contains the definitions for a C++ implementatiom of the Skywatcher API.
  * It is based on work from four sources.
  * A C++ implementation of the API by Roger James.
@@ -248,10 +251,10 @@ class SkywatcherAPI
 
         /// \brief Slew to the given position
         /// \param[in] Axis - The axis to use.
-        /// \param[in] Destination - The destination position in microsteps
+        /// \param[in] DestinationInMicrosteps - The destination position in microsteps
         /// \param[in] verbose - Verbose mode
         /// slew from any status.
-        void SlewTo_Advanced(AXISID Axis, long Destination, bool verbose = true);
+        void SlewTo_Advanced(AXISID Axis, long DestinationInMicrosteps, bool verbose = true);
 
         /// \brief Bring the axis to slow stop in the distance specified
         /// by SetSlewModeDeccelerationRampLength
@@ -339,33 +342,43 @@ class SkywatcherAPI
 };
 
 /* Advanced command set */
+    // :XnCCDDDD -> 
+    //      n = "1" or "2", axis number
+    //      CC = major command word
+    //      DDDD = data or sub-command word, its length depends on each command.
+
     // Read 32-bit data, 
     // ":Xn00mm"
-    #define rSTATUS         "0001"
-    #define rRESOLUTION     "0002"
-    #define rENCODER        "0003"
-    #define rFIRMWARE       "0004"
-    #define rCLOCK_FREQUENCY "0006"
-    #define rSPEED          "0007"
-    #define rWORM_RESOLUTION "000E"
+    #define rSTATUS             "0001"
+    #define rRESOLUTION         "0002"      // in [microsteps]
+    #define rENCODER            "0003"      // in [microsteps]
+    #define rFIRMWARE           "0004"
+    #define rCLOCK_FREQUENCY    "0006"      // High resolution clock frequency, in most case, it is 1MHz, which means the MC's clock has a resolution of 1uS
+    #define rSPEED              "0007"
+    #define rHOME_POSITION      "000B"      // in [microsteps], the position when the home position sensor is triggered.
+    #define rWORM_RESOLUTION    "000E"      // in [microsteps], microsteps per worm revolution.
 
-    // Set encoder reading, 
-    // ":Xn01pppppppp", pppppppp in [Pulse] (microsteps)
-    #define wSET_ENCODER    "01"
+    // Set the axis position reading to pppppppp[microsteps]
+    // ":Xn01pppppppp"
+    #define wSET_ENCODER        "01"
 
-    // Set slewing speed, 
-    // ":Xn02vvvvvvvvvvvvvvvv", vvvvvvvvvvvvvvvv in [Pulse / 1024 Seconds]
-    #define wSET_SPEED      "02"
+    // Slew the axis in rate vvvvvvvvvvvvvvvv[microsteps / 1024 Seconds] 
+    // No need to stop the motor first, change slewing mode, etc.
+    // ":Xn02vvvvvvvvvvvvvvvv"
+    #define wSET_SPEED          "02"
 
-    // GOTO, then slew in designated speed
+    // GOTO position pppppppp[microsteps], then slew in rate vvvvvvvvvvvvvvvv[microsteps / 1024 Seconds]
+    // No need to stop the motor first, change slewing mode, etc.
     // ":Xnppppppppvvvvvvvvvvvvvvvv"
     #define wGOTO_SLEW      
 
     // Actions
     // ":Xn05mm"
-    #define wSWITCH_ON      "0500"
-    #define wSWITCH_OFF     "0501"
-    #define wSTOP           "0504"
-    #define wINITIALIZE     "0505"
+    #define wSWITCH_ON          "0500"
+    #define wSWITCH_OFF         "0501"
+    #define wSTOP               "0504"
+    #define wINITIALIZE         "0505"
+
+    // trajactory tracking commands( for tracking comets, satellites) not added since there is no demand from any host applications 
 
 /* End of Advanced command set */

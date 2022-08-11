@@ -13,6 +13,9 @@
  *  + Added iterative GOTO.
  *  + Simplified driver and logging.
  *
+ * Updated on 2022-06-08 by Frank Y. Liu
+ *  + add support for the advanced command set provided with motor controller firmwares version 3.22 and above.
+ * 
  * This file contains an implementation in C++ of the Skywatcher API.
  * It is based on work from four sources.
  * A C++ implementation of the API by Roger James.
@@ -188,7 +191,7 @@ bool SkywatcherAPI::GetEncoder(AXISID Axis)
         if (!TalkWithAxis(Axis, 'X', rENCODER, Response))
             return false;
 
-        CurrentEncoders[Axis] = stol(Response[1], 8, 16);
+        CurrentEncoders[Axis] = stol(Response, 8, 16);
     }
     else
     {
@@ -236,7 +239,7 @@ bool SkywatcherAPI::GetMicrostepsPerRevolution(AXISID Axis)
         if (!TalkWithAxis(Axis, 'X', rRESOLUTION, Response))
             return false;
 
-        tmpMicrostepsPerRevolution = stol( &Response[1], 8, 16); // Response = "=HHHHHHHH\r"
+        tmpMicrostepsPerRevolution = stol( Response, 8, 16); // Response = "HHHHHHHH"
     }
     else
     {
@@ -282,7 +285,7 @@ bool SkywatcherAPI::GetMicrostepsPerWormRevolution(AXISID Axis)
         if (!TalkWithAxis(Axis, 'X', rWORM_RESOLUTION, Response))
             return false;
 
-        value = stol(&Response[1], 8, 16); // Response = "=HHHHHHHH\r"
+        value = stol(Response, 8, 16); // Response = "HHHHHHHH"
     }
     else
     {
@@ -356,7 +359,7 @@ bool SkywatcherAPI::GetStatus(AXISID Axis)
     if (!TalkWithAxis(Axis, 'f', Parameters, Response))
         return false;
 
-    if ((Response[1] & 0x01) != 0)
+    if ((Response & 0x01) != 0)
     {
         // Axis is running
         AxesStatus[(int)Axis].FullStop = false;
@@ -847,13 +850,13 @@ void SkywatcherAPI::SlewTo(AXISID Axis, long OffsetInMicrosteps, bool verbose)
     AxesStatus[Axis].SetSlewingTo(Forward, HighSpeed);
 }
 
-void SkywatcherAPI::SlewTo_Advanced(AXISID Axis, long Destination, bool verbose)
+void SkywatcherAPI::SlewTo_Advanced(AXISID Axis, long DestinationInMicrosteps, bool verbose)
 {
-    bool Forward = false;
+    bool Forward;
     bool HighSpeed = false;
 
     // Debugging
-    LastSlewToTarget[Axis] = Destination;
+    LastSlewToTarget[Axis] = DestinationInMicrosteps;
     if (verbose)
     {
         MYDEBUGF(INDI::Logger::DBG_DEBUG, "SlewTo Axis %d Offset %ld CurrentEncoder %ld SlewToTarget %ld", Axis,
@@ -863,31 +866,33 @@ void SkywatcherAPI::SlewTo_Advanced(AXISID Axis, long Destination, bool verbose)
     std::string Parameters, Response;
 
     // Assemble command string
-    std::stringstream stream << wGOTO_SLEW              // Command word
-        << std::setfill('0') << std::setw(4 * 2)        // 8 characters of a 32-bit data
-        << std::hex << (long long)Destination;          // 32-bit Destiantion data
-        << "0000000000000000";                          // 16 characters of 64-bit velocity after GOTO
+    std::stringstream stream << wGOTO_SLEW                  // Command word
+        << std::setfill('0') << std::setw(4 * 2)            // 8 characters of a 32-bit data
+        << std::hex << (long long)DestinationInMicrosteps;  // 32-bit Destiantion data
+        << "0000000000000000";                              // 16 characters of 64-bit velocity after GOTO
     Parameters = stream.str();
 
     TalkWithAxis(Axis, 'X', Parameters, Response);
 
-    if (SpeedInRadiansPerSecond > 0.0)
+    if (DestinationInMicrosteps > CurrentEncoders[Axis])
         Forward = true;
+    else
+        Forward = false;
 
     AxesStatus[Axis].SetSlewingTo(Forward, HighSpeed);
 }
 
 bool SkywatcherAPI::SlowStop(AXISID Axis)
 {
+    // Request a slow stop
+    std::string Parameters, Response;
+
     if (SupportAdvancedCommandSet)
     {
-        Slew(Axis, 0, true);
+        return TalkWithAxis(Axis, 'X', wSTOP, Response);
     }
     else
     {
-        // Request a slow stop
-        std::string Parameters, Response;
-
         return TalkWithAxis(Axis, 'K', Parameters, Response);
     }
 }
